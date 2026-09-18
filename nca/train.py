@@ -52,9 +52,20 @@ class TrainConfig:
     pool_size: int = 1024
     damage_n: int = 3
     damage_kind: str = "circle"  # circle | rect | none
+    # Lesion size as a fraction of the shorter grid side. The paper does not state
+    # a value; 0.23 reproduces roughly a quarter of a 40x40 grid's width. This knob
+    # matters: too large and training collapses to a degenerate solution on targets
+    # with internal structure, because every damaged sample becomes ill-posed.
+    damage_radius_frac: float = 0.23
 
     # Stability
-    grad_l2_norm: bool = True
+    # The paper normalises each parameter's gradient by its L2 norm to stop late-run
+    # loss jumps, and we implement it. But it is OFF by default here, because it is
+    # counterproductive on targets with internal structure: see docs/FINDINGS.md.
+    # Two runs of the `face` target collapsed to a degenerate all-empty solution
+    # with it enabled (IoU 0.89 -> 0.00 between evaluations) and none did with it
+    # disabled. Pass --grad-l2 to reproduce the paper's regime.
+    grad_l2_norm: bool = False
     grad_clip: float | None = None
 
     # Bookkeeping
@@ -87,9 +98,13 @@ def apply_damage(x: torch.Tensor, cfg: TrainConfig, generator: torch.Generator) 
     if cfg.damage_kind == "none" or cfg.damage_n <= 0:
         return x
     if cfg.damage_kind == "circle":
-        return damage_circles(x, n=cfg.damage_n, generator=generator)
+        return damage_circles(
+            x, n=cfg.damage_n, max_radius_frac=cfg.damage_radius_frac, generator=generator
+        )
     if cfg.damage_kind == "rect":
-        return damage_rect(x, n=cfg.damage_n, generator=generator)
+        return damage_rect(
+            x, n=cfg.damage_n, max_size_frac=cfg.damage_radius_frac * 1.3, generator=generator
+        )
     raise ValueError(f"unknown damage_kind {cfg.damage_kind!r}")
 
 
@@ -146,7 +161,7 @@ def train(cfg: TrainConfig) -> Path:
     print(f"target        {cfg.target_path or cfg.shape} @ {cfg.size}x{cfg.size}")
     print(f"parameters    {model.num_parameters:,}")
     print(f"pool          {cfg.pool_size} states, batch {cfg.batch_size}")
-    print(f"damage        {cfg.damage_kind} x{cfg.damage_n}")
+    print(f"damage        {cfg.damage_kind} x{cfg.damage_n} (radius frac {cfg.damage_radius_frac})")
     print(f"out           {out_dir}")
     print("-" * 64)
 
@@ -289,7 +304,18 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--pool-size", type=int, default=1024)
     p.add_argument("--damage-n", type=int, default=3)
     p.add_argument("--damage-kind", default="circle", choices=["circle", "rect", "none"])
-    p.add_argument("--no-grad-l2", action="store_true")
+    p.add_argument(
+        "--damage-radius",
+        type=float,
+        default=0.23,
+        dest="damage_radius_frac",
+        help="lesion radius as a fraction of the shorter grid side (circles) or size (rects)",
+    )
+    p.add_argument(
+        "--grad-l2",
+        action="store_true",
+        help="enable the paper's per-variable gradient L2 normalisation (see docs/FINDINGS.md)",
+    )
     p.add_argument("--grad-clip", type=float, default=None)
     p.add_argument("--eval-every", type=int, default=250)
     p.add_argument("--checkpoint-every", type=int, default=500)
@@ -321,7 +347,8 @@ def main(argv: list[str] | None = None) -> None:
         pool_size=args.pool_size,
         damage_n=args.damage_n,
         damage_kind=args.damage_kind,
-        grad_l2_norm=not args.no_grad_l2,
+        damage_radius_frac=args.damage_radius_frac,
+        grad_l2_norm=args.grad_l2,
         grad_clip=args.grad_clip,
         seed=args.seed,
         log_every=args.log_every,
