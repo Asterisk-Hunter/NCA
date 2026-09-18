@@ -210,7 +210,14 @@ Mechanically, every parameter takes a step of comparable magnitude regardless of
 its gradient size, which is a crude per-parameter adaptive step size. It matters
 more than you'd expect here, because backpropagation through 64–96 recurrent steps
 produces gradients spanning many orders of magnitude across layers. Ours is
-implemented as `normalize_gradients_l2` in `nca/train.py` and is on by default.
+implemented as `normalize_gradients_l2` in `nca/train.py`.
+
+> ⚠️ **This fix does not generalise, and we default it off.** On targets with
+> internal structure it *causes* the failure it was meant to prevent: two of two
+> `face` runs collapsed to an all-empty output with it enabled, and the collapse was
+> invisible in the training loss. It is reachable via `--grad-l2`. The evidence and
+> the hypothesised mechanism are in **[FINDINGS.md](FINDINGS.md)**, Finding 1 — this
+> is the single most interesting thing this implementation found.
 
 ## 5. The four experiments
 
@@ -296,6 +303,9 @@ As a learning vehicle it is unusually dense:
   a mass ratio, because loss alone cannot distinguish a converging model from one
   that explodes at step 200.
 - **Checkpoint resume**, since real runs are long.
+- **An empirical critique of the paper's own stability fix** (`docs/FINDINGS.md`),
+  including a measured demonstration that target difficulty tracks internal
+  structure rather than size.
 
 ## References
 

@@ -3,6 +3,11 @@
 How to run each of the paper's four experiments, what to look for, and the
 ablations and open questions this repo makes cheap to answer.
 
+> **Read [FINDINGS.md](FINDINGS.md) first if you are training a target with internal
+> structure.** The `face` target requires `--damage-radius 0.14` and no `--grad-l2`;
+> the default configuration collapses it into an all-empty output, and the training
+> loss will not tell you.
+
 ## Setup
 
 ```bash
@@ -52,10 +57,16 @@ python -m nca.render plot --run-dir runs/e2
 The interesting result, and the one worth showing people. Train with damage, then
 apply damage types the model has **never seen**.
 
+Note the two non-default flags. With the defaults this run collapses (Finding 1).
+
 ```bash
-python -m nca.train --shape face --iterations 3000 --damage-kind circle --damage-n 3 --out-dir runs/e3
+python -m nca.train --shape face --iterations 1800 --damage-kind circle --damage-n 3 \
+    --damage-radius 0.14 --out-dir runs/e3 --eval-every 600
 python -m nca.render regenerate --checkpoint runs/e3/checkpoint.pt --steps 200 --recovery 300
 ```
+
+Measured on the shipped model: `circle` 0.953, `half-left` 0.937, `half-top` 0.938,
+`square` 0.924 — so recovery from unseen damage within 3 % of the trained type.
 
 This writes four GIFs:
 
@@ -108,8 +119,10 @@ tested rather than believed.
 | The pool is what creates persistence | Train with `--pool-size 1`, compare `persist_mass_ratio`. Expect runaway growth or decay. |
 | Alive masking keeps one organism | `--no-alive-masking`, then look at the growth GIF for scattered debris. |
 | Damage is what creates regeneration | Same run with `--damage-n 0`, then `render regenerate`. Expect much weaker healing. |
-| Gradient L2 norm prevents late loss jumps | `--no-grad-l2` on a 3000-iteration run and look for discontinuities in `log.csv`. |
+| **Gradient L2 norm *causes* collapse on structured targets** | `--grad-l2` on a `face` run, `--eval-every 300`. Watch `alpha_iou` drop from ~0.90 to 0.00. See `docs/FINDINGS.md` Finding 1. |
+| Gradient L2 norm helps simple targets | Same flag on `heart`: IoU 0.972 with it, 0.942 without. |
 | Circles are a gentler lesion than rectangles | `--damage-kind rect` and compare `regen_half-left` on the two models. |
+| Lesion size interacts with target structure | `--damage-radius 0.14` vs `0.23` on `face` with `--grad-l2`. Smaller delays the collapse; it does not prevent it. |
 | Asynchrony matters | `--fire-rate 1.0` (fully synchronous) vs `0.5`. |
 | Capacity is not the bottleneck | `--hidden 32` — 2,560 parameters. How much quality is actually lost? |
 | Grid size is a hard limit | Train at `--size 24` and evaluate at `--size 48`. Expect failure. |
@@ -143,17 +156,28 @@ Question 3 is the one worth doing, and the one closest to the paper's own framin
 
 ## Reproducing everything from scratch
 
+These are the exact commands behind the numbers in the README.
+
 ```bash
 python -m tests.run_tests
 
-python -m nca.train --shape heart --iterations 300  --out-dir runs/e1
-python -m nca.train --shape heart --iterations 3000 --out-dir runs/e2
-python -m nca.train --shape face  --iterations 3000 --out-dir runs/e3
+# Experiment 1: short run, unstable long-term
+python -m nca.train --shape heart --iterations 300 --out-dir runs/e1
+
+# Experiment 2 + 3: the shipped heart model
+python -m nca.train --shape heart --iterations 1500 --out-dir runs/e2 --eval-every 500
+
+# Experiment 2 + 3 on a target with internal structure.
+# Smaller lesion and no --grad-l2, both required. See docs/FINDINGS.md.
+python -m nca.train --shape face --iterations 1800 --damage-radius 0.14 \
+    --out-dir runs/e3 --eval-every 600
 
 for d in e1 e2 e3; do python -m nca.render plot --run-dir runs/$d; done
 python -m nca.render grow       --checkpoint runs/e2/checkpoint.pt
-python -m nca.render regenerate --checkpoint runs/e3/checkpoint.pt
+python -m nca.render regenerate --checkpoint runs/e2/checkpoint.pt
 python -m nca.render rotate     --checkpoint runs/e2/checkpoint.pt
+python -m nca.render grow       --checkpoint runs/e3/checkpoint.pt
+python -m nca.render regenerate --checkpoint runs/e3/checkpoint.pt
 ```
 
 Runs are seeded (`--seed`, default 0) and the resolved config is stored in every

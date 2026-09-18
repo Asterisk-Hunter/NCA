@@ -112,6 +112,18 @@ CPU generator. `torch.Generator(device='cuda')` feeding a CPU-default `torch.ran
 raises `Expected a 'cpu' device type for generator but found 'cuda'`. Hence
 `generator` (device) and `steps_generator` (cpu).
 
+**`grad_l2_norm` defaults to off, deviating from the paper.** The paper's
+per-variable gradient L2 normalisation caused a silent catastrophic collapse on
+`face` (2 of 2 runs) and prevented it in 0 of 4 runs without it. It costs a little
+quality on simple targets (heart IoU 0.972 with, 0.942 without), which is a fair
+trade against a 100 % silent failure rate on structured targets. `--grad-l2`
+reproduces the paper's regime. Evidence in `docs/FINDINGS.md`.
+
+**Damage radius is a first-class flag.** The paper says "a random circular region"
+and never gives a size. It matters enough to be tunable (`--damage-radius`, default
+0.23 × the shorter grid side). Targets with internal structure need it smaller; the
+shipped `face` config uses 0.14.
+
 **GIFs written with Pillow.** No ffmpeg dependency, no subprocess, works on Windows.
 `disposal=2` keeps frames from smearing.
 
@@ -150,12 +162,16 @@ RTX 4050 Laptop (6 GB), 40×40 grid, `C=16`, batch 8, steps ~U[64,96]:
 | Quantity | Value |
 |----------|-------|
 | Parameters | 8,320 |
-| Throughput | ~4.5 iterations/s |
-| 1,000 iterations | ~3.7 min |
+| Throughput | ~5–7 iterations/s (varies with GPU state and `--eval-every`) |
+| 1,000 iterations | ~2.5–3.5 min |
 | VRAM | well under 1 GB; the model is tiny, the cost is the 64–96 sequential steps |
 
 The bottleneck is sequence length, not model size. Increasing batch size is
 nearly free; increasing steps is linear.
+
+Throughput measurement is noisy on a laptop GPU — 4.5 it/s and 7.1 it/s were both
+observed for the same configuration at different times. Use it for planning, not
+for benchmarking.
 
 ## Gotchas
 
