@@ -1,0 +1,9 @@
+# Core
+torch>=2.0
+numpy>=1.24
+
+# Targets and rendering (GIFs are written with Pillow, so no ffmpeg needed)
+pillow>=10.0
+
+# Training curves
+matplotlib>=3.7

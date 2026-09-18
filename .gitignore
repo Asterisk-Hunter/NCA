@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Training artifacts stay out of the repo; curated demo media goes in docs/media/
+runs/
+*.pt
+*.pth
+
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
