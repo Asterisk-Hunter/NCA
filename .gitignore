@@ -19,3 +19,6 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local notes
+handoff.md

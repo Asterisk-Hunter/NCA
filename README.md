@@ -205,8 +205,6 @@ tests/           41 invariant tests
   invariant table, design decisions with reasons, and the gotchas.
 - **[docs/EXPERIMENTS.md](docs/EXPERIMENTS.md)** — how to run each experiment, an
   ablation table (every claim above is a flag you can test), and open questions.
-- **[handoff.md](handoff.md)** — state of the project, what is verified, what is
-  unresolved.
 
 ## Design notes
 
